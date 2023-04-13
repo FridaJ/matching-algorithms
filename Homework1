@@ -1,0 +1,134 @@
+# We have seen some useful functions through the first week which are found below:
+import matplotlib.pyplot as plt
+
+
+def naive(p, t):
+    occurrences = []
+    for i in range(len(t) - len(p) + 1):
+        match = True # Used as dummy variable to be kept if nothing is false after
+        for j in range(len(p)):
+            if p[j] != t[i+j]:
+                match = False
+                break
+        if match:
+            occurrences.append(i)
+    return occurrences
+
+
+def reverseComplement(s):
+    complement = {"A":"T", "C":"G", "G":"C", "T":"A", "N":"N"}
+    t = ""
+    for base in s:
+        t = complement[base] + t
+    return t
+
+
+# For reading Fasta files as one long string and no header
+def readGenome(filename):
+    genome = ""
+    with open(filename) as fh:
+        for line in fh:
+            if not line[0] == ">":
+                genome += line.rstrip()
+    return genome
+
+
+# And for reading Fastq files:
+def readFastq(filename):
+    sequences = []
+    qualities = []
+    with open(filename) as fh:
+        while True: # Not EOF
+            fh.readline()
+            seq = fh.readline().rstrip()
+            fh.readline()
+            qual = fh.readline().rstrip()
+            sequences.append(seq)
+            qualities.append(qual)
+            if len(seq) == 0:
+                break
+    return sequences, qualities
+
+
+#######----- Homework starts here. 1. Make naive function that is "strand-aware"
+
+
+# p = pattern and t = text (strand), returns total number of unique matches plus first position for each pattern
+def naive_twopatterns(p, t):
+    p_rev = reverseComplement(p)
+    indices_p = naive(p, t)
+    indices_prev = naive(p_rev, t)
+    result = (indices_p + indices_prev)
+    if p == reverseComplement(p):
+        return int(len(result)/2), indices_p[0], indices_prev[0]
+    else:
+        return len(result), indices_p[0], indices_prev[0]
+
+virus = readGenome("lambda_virus.fa")
+
+n = naive_twopatterns("AGTCGA", virus)
+print(n)
+
+#######------- Next part, allowing two mismatches, but not caring about the complement pattern
+
+# Takse a pattern and a sequence and returns position of first match and number of matches
+def naive_2mm(p, t):
+    occurrences = []
+    for i in range(len(t) - len(p) + 1):
+        match = True # Used as dummy variable to be kept if nothing is false after
+        mismatches = 0
+        for j in range(len(p)):
+            if p[j] != t[i+j] and mismatches < 2:
+                mismatches += 1
+                match = True
+            elif p[j] != t[i+j] and mismatches >= 2:
+                match = False
+                break
+        if match:
+            occurrences.append(i)
+    return occurrences[0], len(occurrences)
+
+
+print(naive_2mm("AGGAGGTT", virus))
+
+
+########------- Third task, analysing the Fastq file and figuring out which offset is faulty.
+
+# Get sequences from file together with corresponding quality strings:
+seqs, quals = readFastq("ERR037900_1.first1000.fastq")
+
+# Look at the distribution of bases in the reads:
+import collections
+count = collections.Counter()
+for seq in seqs:
+    count.update(seq)
+print(count)
+# Counter({'C': 29665, 'A': 24057, 'G': 22888, 'T': 22476, 'N': 914})
+# THere is something wrong with the base pairing here since there are way more C than G and N can't make up for that
+
+# Idea: Make a histogram of gc bases with regards to offset and see if there is something weird
+# First, a function that reads the sequences and returns the
+def findGCByPos(reads):
+    gc = [0]*100
+    totals = [0]*100
+    for read in reads:
+        for i in range(len(read)):
+            if read[i] == "C" or read[i] == "G":
+                gc[i] += 1
+            totals[i] += 1
+    for i in range(len(gc)):  # To calculate the gc ratio at every given gc position, looking back
+        if totals[i] > 0:
+            gc[i] /= float(totals[i])  # New gc[i] is the result of the division
+
+    return gc  # Array with gc content by position
+
+# Use function on seqs from the Fastq file, then plot with matplotlib
+
+gc = findGCByPos(seqs)
+
+import matplotlib.pyplot as plt
+
+plt.plot(range(len(gc)), gc) # First argument is list of values on the x-axia
+plt.show()
+
+#print(quals[:100])
